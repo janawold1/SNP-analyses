@@ -1,0 +1,87 @@
+#After trying to partition the file into sample & chromosome specific VCF, I had some issues with file format (Mostly that only the header information remained or that the file wasn't useful for downstream analyses). One consistent issue was high depth in certain sites. I decided to trial filters that excluded sites with a depth > 50; > 100; > 150; and > 200. I did this for all individuals with:
+bcftools filter -O z -o VCFs/all_sites/max.depth50.vcf.gz deepvariant.r1.q20.allelicprimitives.sorted.bcf -e 'DP>50'
+bcftools filter -O z -o VCFs/all_sites/max.depth100.vcf.gz deepvariant.r1.q20.allelicprimitives.sorted.bcf -e 'DP>100'
+bcftools filter -O z -o VCFs/all_sites/max.depth150.vcf.gz deepvariant.r1.q20.allelicprimitives.sorted.bcf -e 'DP>150'
+bcftools filter -O z -o VCFs/all_sites/max.depth200.vcf.gz deepvariant.r1.q20.allelicprimitives.sorted.bcf -e 'DP>200'
+
+##And for our key individuals, I first created a file with without any depth filtering with:
+bcftools view -O z -o VCFs/all_sites/key.individuals.max.depth50.vcf.gz -S samples.txt VCFs/all_sites/max.depth50.vcf.gz
+bcftools view -O z -o VCFs/all_sites/key.individuals.max.depth100.vcf.gz -S samples.txt VCFs/all_sites/max.depth100.vcf.gz
+bcftools view -O z -o VCFs/all_sites/key.individuals.max.depth150.vcf.gz -S samples.txt VCFs/all_sites/max.depth150.vcf.gz
+bcftools view -O z -o VCFs/all_sites/key.individuals.max.depth200.vcf.gz -S samples.txt VCFs/all_sites/max.depth200.vcf.gz
+
+## Heterozygous sites were filtered out and comparisons between chromosome 5, Z & W demonsrated that a maximum depth of 50 would suit. To compare between the sexes, I made specific files as below:
+
+bcftools view -O v -o VCFs/all_sites/key.ladies.maxdepth50.vcf -S key_ladies.txt VCFs/all_sites/max.depth50.vcf.gz
+bcftools view -O v -o VCFs/all_sites/key.fellas.maxdepth50.vcf -S key_fellas.txt VCFs/all_sites/max.depth50.vcf.gz
+
+bcftools view -O v -o VCFs/homozygous_sites_only/key.ladies.maxdepth50.homosites.vcf -g ^het VCFs/all_sites/key.ladies.maxdepth50.vcf.gz
+bcftools view -O v -o VCFs/homozygous_sites_only/key.fellas.maxdepth50.homosites.vcf -g ^het VCFs/all_sites/key.fellas.maxdepth50.vcf.gz
+
+bcftools view -O v -o VCFs/heterozygous_sites/key.ladies.maxdepth50.homosites.vcf -g ^hom VCFs/all_sites/key.ladies.maxdepth50.vcf
+bcftools view -O v -o VCFs/heterozygous_sites/key.fellas.maxdepth50.homosites.vcf -g ^hom VCFs/all_sites/key.fellas.maxdepth50.vcf
+
+#Ideally would then filter for <.5 & <.25 missingness from sites. But as it stands, I think there isn't a way to filter in this manner since the proportion of misssing data across individuals isn't in the VCF.
+
+############################################################################################################################################
+###ANALYSES
+##First got the mean site depth for our key males and females at homozygous sites as per...
+vcftools --vcf VCF/homozygous_sites_only/key.fellas.maxdepth50.homosites.vcf --site-mean-depth --out vcftools/maxdepth50/fellas.maxdepth50.homosites
+
+vcftools --vcf VCF/homozygous_sites_only/key.ladies.maxdepth50.homosites.vcf --site-mean-depth --out vcftools/maxdepth50/ladies.maxdepth50.homosites
+
+#Then created the chromosome specific files with:
+
+grep CM013766.1 fellas.maxdepth50.homosites.ldepth.mean > fellas.maxdepth50.homosites.chr5.meandepth
+grep CM013763.1 fellas.maxdepth50.homosites.ldepth.mean > fellas.maxdepth50.homosites.chrZ.meandepth
+grep CM013773.1 fellas.maxdepth50.homosites.ldepth.mean > fellas.maxdepth50.homosites.chrW.meandepth
+
+grep CM013766.1 ladies.maxdepth50.homosites.ldepth.mean > ladies.maxdepth50.homosites.chr5.meandepth
+grep CM013763.1 ladies.maxdepth50.homosites.ldepth.mean > ladies.maxdepth50.homosites.chrZ.meandepth
+grep CM013773.1 ladies.maxdepth50.homosites.ldepth.mean > ladies.maxdepth50.homosites.chrW.meandepth
+
+#Adding a sex variable for plotting
+
+awk '{print $0,"\tmale"}' fellas.maxdepth50.homosites.chr5.meandepth > fellas.maxdepth50.homosites.chr5sexed.meandepth
+awk '{print $0,"\tmale"}' fellas.maxdepth50.homosites.chrZ.meandepth > fellas.maxdepth50.homosites.chrZsexed.meandepth
+awk '{print $0,"\tmale"}' fellas.maxdepth50.homosites.chrW.meandepth > fellas.maxdepth50.homosites.chrWsexed.meandepth
+
+awk '{print $0,"\tfemale"}' ladies.maxdepth50.homosites.chr5.meandepth > ladies.maxdepth50.homosites.chr5sexed.meandepth
+awk '{print $0,"\tfemale"}' ladies.maxdepth50.homosites.chrZ.meandepth > ladies.maxdepth50.homosites.chrZsexed.meandepth
+awk '{print $0,"\tfemale"}' ladies.maxdepth50.homosites.chrW.meandepth > ladies.maxdepth50.homosites.chrWsexed.meandepth
+
+cat fellas.maxdepth50.homosites.chr5sexed.meandepth >> fellas.maxdepth50.homosites.chr5ZWsexed.meandepth
+cat fellas.maxdepth50.homosites.chrZsexed.meandepth >> fellas.maxdepth50.homosites.chr5ZWsexed.meandepth
+cat fellas.maxdepth50.homosites.chrWsexed.meandepth >> fellas.maxdepth50.homosites.chr5ZWsexed.meandepth
+
+cat ladies.maxdepth50.homosites.chr5sexed.meandepth >> ladies.maxdepth50.homosites.chr5ZWsexed.meandepth
+cat ladies.maxdepth50.homosites.chrZsexed.meandepth >> ladies.maxdepth50.homosites.chr5ZWsexed.meandepth
+cat ladies.maxdepth50.homosites.chrWsexed.meandepth >> ladies.maxdepth50.homosites.chr5ZWsexed.meandepth
+
+#the awk command inserts a space character before the tab. Had to remove the space in all files. Did so with search/replace in nano. Now ready for plotting! 
+############################################################################################################################################
+#After plotting, we decided to only use females going forward. So, to continue with our data filtering, we decided to remove sites that registered in Males on the W chromosome from the females.
+#This script below I found online. I basically compares the 1st file against the second. The order files are inputted matters for the output. That is to say when I flipped it, it didn't work because sites found in males were still in the file. 
+
+awk 'BEGIN { while ( getline < "fellas.maxdepth50.homosites.chrW.meandepth" ) { arr[$2]++ } } { if (!( $2 in arr ) ) { print } }' ladies.maxdepth50.homosites.chrW.meandepth > W_sites_not_in_males
+
+### Used the 'W_sites_not_in_males' file to filter for sites that were homozygous and not in males for our female comparisons. For this next step, the original file had to be compressed with either bgzip or the '-O' flag in bcftool, then indexed with tabix. Had to flag the regions file this way because if used '-R' then bcftools didn't work properly. 
+
+bcftools view -O z -o ladies_W.vcf.gz --regions-file W_sites_not_in_males key.ladies.maxdepth50.homosites.vcf.gz
+
+##For one reason or another, after running this script the chromosome positions aren't sorted. So, to get them back in order:
+
+bcftools sort -O z -o ladies_W.sorted.vcf.gz ladies_W.vcf.gz
+
+#Now to partition the files for comparisons I used the scripts mk_GranddaughterVSmaternalgrandmother.sh mk_cousinVSmaternalGmother.sh and mk_sisVSsis.sh
+
+#To make a index file for each directory, I ran the loop
+for file in *.vcf.gz; do tabix $file; done
+
+#I think I'm going to do my comparisons with either.
+bcftools gtcheck --GTs-only 1 FILEWITHINDIVIDUALSFORCOMPARISON.vcf
+#or
+###HAVE NO IDEA HOW TO GET THIS TO WORK. bcftools isec -p output -n-1 -c all indiv1.vcf.gz indiv2.vcf.gz #remember to index the files first.
+
+############################################################################################################################################
+##And to remove sites called as heterozygous in females from the males' Z

@@ -1,0 +1,418 @@
+# Axe-demux (demultiplex the .gz files)
+
+git clone --recursive https://github.com/kdmurray91/axe.git axe
+cd axe
+mkdir -p build && cd build
+cmake ..
+make
+sudo make install
+
+#Downloads axe-demux. Alternatively, you can manually download the zip from https://github.com/kdmurray91/axe and follow 'cd axe master' and the rest of the commands.  
+
+axe-demux -b ApeK1Plate1KakiKey.txt -f 2264-L1-24-1_S1_L001_R1_001.fastq -r 2264-L1-24-1_S1_L001_R2_001.fastq -I
+
+#First try at using this line. Two errors: option requires an argument – 'I'. Axe failed due to bad CLI flags Consult the usage below please! 
+
+axe-demux -b ApeK1Plate1KakiKey.txt -f 2264-L1-24-1_S1_L001_R1_001.fastq -r 2264-L1-24-1_S1_L001_R2_001.fastq -I ID+_+readnumber+.fastq
+
+#Second try. Found duplicate barcode CACCATGA. There are actually quite q few barcodes that are duplicated. But the combination of the forward and reverse primers makes it unique. 
+
+axe-demux -b ApeK1Plate1KakiKey.txt -c -f 2264-L1-24-1_S1_L001_R1_001.fastq -r 2264-L1-24-1_S1_L001_R2_001.fastq -I ID+_+readnumber+.fastq
+#This one worked, but it did add ID+_+readnumber+.fastq before all the sample names. I confirmed with Roger that it also takes off the barcodes.
+----------------------------------------------------------
+
+#SeqHaq (add A's to the beginnings of each sequence). 
+
+#The current version of SeqHax does not have the 'seq' function, so I downloaded version 2.0. 
+
+#Once downloaded…
+
+cd seqhax
+mkdir build && cd build
+cmake ..
+make
+make install
+seqhax seq -P A 15_128_il.fastq > /home/local/Desktop/Trial Axe-demux/Tassel_Dir/15_128_fastq.txt 
+
+# Ran programme, did not create output. 
+
+seqhax seq -P A 15_128_il.fastq > /home/local/Desktop/Trial/Tassel_Dir/Illumina/15_128_fastq.txt
+
+#Created file with A's attached. Needs to be done individually. I wonder if these can be done in a large batch, instead of individually?
+
+-------------------------------------------------------------------------------------------------------------
+
+#Tassel 3.0/UNEAK Pipeline commands – Followed on 15-16 Dec 2016
+
+tassel/run_pipeline.pl -fork1 -UCreatWorkingDirPlugin -w M:/UNEAK/ -endPlugin -runfork1
+
+tassel/run_pipeline.pl -fork1 -UFastqToTagCountPlugin -w M:/UNEAK/ -e ApeKI -endPlugin -runfork1
+
+#Make sure all fastq files are in the “Illumina” folder and the key file in the folder “key”
+#For the first run from Rob, files must follow the naming convention: samplenumber_1_fastq.txt otherwise, the files will not read. 
+
+tassel/run_pipeline.pl -Xms512m -Xmx4g -fork1 -UMergeTaxaTagCountPlugin -w M:/UNEAK/ -c 5 -endplugin -runfork1
+
+#This script was modified because the maximum setting at the time (1365m) was too small (see error message below). So, I changed the maximum memory requirements for the rest of the operation to 4g with the commands -Xmx4g. For 32g computer we have used a max of 16g (-Xmx16g)
+
+#ERROR net.maizegenetics.plugindef.ThreadedPluginListener - Out of Memory: UMergeTaxaTagCountPlugin could not complete task: 
+Current Max Heap Size: 1365 Mb
+Use -Xmx option in start_tassel.pl or start_tassel.bat
+to increase heap size. Included with tassel standalone zip.
+
+tassel/run_pipeline.pl -Xms512m -Xmx4g -fork1 -UTagCountToTagPairPlugin -w M:/UNEAK/ -e 0.03 -endPlugin -runfork1
+
+tassel/run_pipeline.pl -Xms512m -Xmx4g -fork1 -UTagPairToTBTPlugin -w M:/UNEAK/ -endPlugin -runfork1
+
+tassel/run_pipeline.pl -Xms512m -Xmx4g -fork1 -UTBTToMapInfoPlugin -w M:/UNEAK/ -endPlugin -runfork1
+
+tassel/run_pipeline.pl -Xms512m -Xmx4g -fork1 -UMapInfoToHapMapPlugin -w M:/UNEAK/ -mnMAF 0.05 -mxMAF 0.5 -mnC 0 -mxC 1 -endPlugin -runfork1
+
+#Running tassel
+tassel/start_tassel.pl
+
+#Starts Tassel for you
+#You can upload HapMap.hmp.txt
+#Rob's Initial Filtering with a minimum count of 30 (out of 54 sequences) minimum frequency of .1, maximum frequency of 1 and the default positions (which is all). The minimum count should be closer to 0.8 of your samples. 
+
+--------------------------------------------------------------------------------------------------------------------------
+
+#Running Plink
+#You can use Tassel to output your dataset into PLINK format. Just make sure to put these files in your PLINK folder.
+#Download Plink vs. 1.9 into your user bin, then put it in your path to use.
+#https://www.cog-genomics.org/plink2 has a lot of great information!
+
+#Running Plink
+#You can use Tassel to output your dataset into PLINK format. Just make sure to put these files in your PLINK folder.
+#Download Plink vs. 1.9 into your user bin, then put it in your path to use.
+
+./plink --file Kaki_80_Trial.plk --nonfounders --make-bed --out Kaki_80_Trial_Out -- indep 50 5 2 --make-founders
+
+./plink --ped Kaki_80_Trial.ped --map Kaki_80_Trial.map --nonfounders --make-bed --out Kaki_80_Trial_Out -- indep 50 5 2 --make-founders
+
+#I used this script to do initial LD pruning, following Chen et al. 2016. Before doing this, you need to also change your .map file so that all your SNPs are on Chromosome 1. You can do this in Excel. Just make sure that you save it as a tab-delimited csv. 
+#The --make-bed file changes your files into more useable binary files. 
+#The --out allows you to change the output log name.  
+
+./plink --bfile Kaki_80_Trial_Out -extract Kaki_80_Trial_Out.prune.in --make-bed --out Kaki_80_Trial_Out2 --recode
+
+# --Extract takes your pruned information and puts it into a new bed file. 
+# --Recode allows you to rewrite your .ped and .map files
+
+#I used this script to do initial LD pruning, following Chen et al. 2016. Before doing this, you need to also change your .map file so that all your SNPs are on Chromosome 1. You can do this in Excel. Just make sure that you save it as a tab-delimited csv. 
+#The --make-bed file changes your files into more useable binary files. 
+#The --out allows you to change the output log name. 
+#Sometimes, I get error messages having to do with either “Failed to open .map” or “line 1 of .map is pathologically long”. To get around these errors, I simply pasted the information into a new Text Wrangler file and saved it with the same outputs. It worked great.  
+#If on linux use a single - instead of --
+#Transferred to excel and then text editor file where replaced commas with spaces
+#Can also include -hwe [p-value] and -recode vcf (for vcf file output) e.g., ./plink -file '/home/steeves/Kermadec_petrel/Hapmap_UNEAK_90percentind.plk' -nonfounders -make-bed -out UNEAK-90-trial -indep 50 5 2 -make-founders -hwe 0.05 -recode vcf
+
+./plink --vcf /name_and_location_of_VCF_file --recode structure --out /name_and_location_of_output_file
+#provides you with output files for STRUCTURE
+
+--------------------------------------------------------------------------------------------------------------------------
+STACKS Pipeline. 
+
+#Install programme. First, download from Catchen Lab. Once unzipped in home directory, navigate to this folder. 
+
+./configure
+make
+sudo make install
+
+#This programme works as a wrapper, either by running de novo (i.e., denovo_map.pl) or with a reference (i.e., ref_map.pl). 
+
+#You will create a bash file (e.g., run_stacks.sh) that will detail what the programme should run, without things getting too messy. The file will look like the one below:
+
+#!/bin/sh
+
+denovo_map.pl -S -b 1 -o /output_folder \
+-s /location_of_fastq_FIRSTsamplename.fastq \
+-s /location_of_fastq_SUBSEQUENTsamplename.fastq \
+-s /location_of_fastq_LASTsamplename.fastq 
+
+-OR-
+
+#!/bin/sh
+
+Ref_map.pl -S -m 5 -b 1 -o /output_folder \
+-s /location_of_samfile_FIRSTsamplename.sam \
+-s /location_of_samfile_SUBSEQUENTsamplename.sam \
+-s /location_of_samfile_LASTsamplename.sam 
+
+# -m 5 means that you have a minimum stack depth of 5. 
+# -b 1 is naming your database/catalogue ID 1. 
+# -S used to build *.BAM file names. 
+#-o is your output folder
+
+#Make sure that you don’t have a backslash on the very last line of the bash command file. SAMfiles can be created using BWA or Bowtie. 
+
+Bwa index -a bwtsw “/location_of_reference_genome/Kaki1_draftgenome_1_1.fasta”
+
+#This creates an index of the reference genome. 
+
+Bwa aln -t4 “/location_of_draft_genome/Kaki1_draftgenome_1_1.fasta” “/Location_of_tags_to_align/tagsForAlign.fa.gz” > “/location_of_new_file/tagsForAlign.sai”
+
+#This creates a *.sai file. 
+
+Bwa samse “/location_of_draft_genome/Kaki1_draftgenome_1_1.fasta” “/location_of_sai/tagsForAlign.sai” “/Location_of_tags_to_align/tagsForAlign.fa.gz” > “/location_of_new_file/tagsForAlign.sam”
+
+#To run STACKS de novo or reference-guided, navigate to the folder that your fastq/sam files are in, and also your run_stacks.sh shell script. Then, run the following command:
+
+Bash run_stacks.sh
+
+#Depending on whether you are using a reference genome or not, this may be take a few hours or a few weeks. De novo takes much longer than reference-guided. UNEAK also runs MUCH faster than Stacks de novo.
+
+#Once the run is done, you need to follow it up with ‘populations’ to get a vcf file on the other end. A population file must also be made (note: you list all your individuals as one population, if there is no need to do so). Here is what a population file looks like (you can make it using nano)
+
+File_ID	 <tab> 1
+File_ID	 <tab> 1
+File_ID	 <tab> 1
+File_ID	 <tab> 1
+File_ID	 <tab> 1
+
+#Note, the 1 stands for the population you are placing them into. If there are multiple populations, you can list them as 2, 3, etc… 
+
+#Now you can run populations:
+
+Populations -P /location_of_stacked_files -M ./Populations_File -b1 -r0.1 --vcf
+
+# -r0.1 says that at least 10% of all individuals must have the SNP. You can make this higher to be more conservative. If you put no -r value, the computer programme might not function and will overload instead. The --vcf option will provide an usable output.
+
+#Now, we will use a Python script that Roger wrote to convert vcf2ra_ro_ao.py
+
+Python vcf2ra_ro_ao.py /location_of_vcf_file/batch1.vcf
+
+--------------------------------------------------------------------------------------------------------------------------
+
+KGD (note -- Stephanie usually follows the code that is in her blue binder)
+
+#If you are using outputs from UNEAK, you will simply use “HapMap.hmc.txt”
+#If you are using outputs from Tassel or STACKS (these will be VCF files), you will need to use the vcf2ra_ro_ao.py python script to transform your data into an *.ra.tab file in a BASH shell. Navigate to the KGD-master folder in the BASH shell.
+
+python vcf2ra_ro_ao.py “name_and_location_of_file/file.vcf”
+
+#Once you press enter, a *.ra.tab file will be made for you. 
+
+#Now, you can proceed to R-Studio to run KGD. 
+
+> setwd("~/Desktop/KGD-master/Example/Kaki_Trial")
+#Set your working directory to the folder where the KGD scripts are (including 
+GBS-Chip-Gmatrix.R, GBSPedAssign.R, GBSRun.R) . Your *.hmc file should be in the same folder. 
+
+> genofile <- “ra.tab_or_HMC.txt”
+#Loads your *.ra.tab or hmc file. 
+
+>gform <- “Tassel”
+#or “uneak” if that’s what you’re using.
+
+> source(GBS-Chip-Gmatrix.R)
+#this loads the source code -- double check that the 
+#Sample depth will be low because of missing data.
+#Missing genotypes can be high
+
+> Gfull <- calcG()
+
+> GHWdgm.05 <- calcG(which(HWdis > -0.05),”HWdgm.05”, npc=4)
+
+> str(GHWdgm.05)
+
+#to clear environment
+>rm(list = ls())
+
+--------------------------------------------------------------------------------------------------------------------------
+
+GBSX # Used this for unique barcode genertor
+Java -jar “location_of_GBSX_Releasess/GBSX_v1.0.jar” --BarcodeGenerator -b 96 -e EcoT22I > 96barcodes.txt  
+
+#Generates 96 barcodes for EcoT22I and puts them into a new file called “96barcodes”
+
+#Roger also created a bit of code that deleted all text in the *.txt file, except for the new barcodes.   
+
+#Roger also created a bit of perl code to prepend new barcodes onto *.fastq files and produce new files. This is called mux.barcodes.pl. It will also make your keyfile, but you have to put in the flowcell and lane manually using excel (save as *.txt [tab delimited]). See Roger’s Appending New Barcodes to Tags below...
+
+#Naming conventions need to be correct for Tassel 5 (check online if you get no results). 
+
+--------------------------------------------------------------------------------------------------------------------------
+Roger’s Appending New Barcodes to Tags
+
+cd /Volumes/Scully/AGRF_CAGRF15076/ 
+#move into the appropriate directory
+
+ls *fastq | perl -e ‘while (<>) {chomp; $name = $_; $n2 = $_; $n2 =~ s/^.{5}readnumber\+.//; system(“mv $name $n2”);}’
+#Ilina and I believe that Roger is beginning to create the barcode here. Later, he uses Emacs to create mux_barcodes.pl.
+
+Perl mux_barcodes.pl 96barcodes.txt ./
+#This actually runs Roger’s script. -c command added here makes sure that your syntax is okay. 
+# ./ means that it’s all going into your current working directory. 
+
+Rm fastq_unknown_il.barcoded.fastq 
+#This is a huge file that has very little to do with Tassel, so it’s removed! **Ask Roger what this means. 
+
+Cat *.barcoded* > CAYPUANXX_3_fastq.fq
+#This concatenates all the barcoded fastq files into one. CAYPUANXX is the flowcell, and 3 is the lane. This one is for SP, kakī is only different by the lane number. 
+
+
+--------------------------------------------------------------------------------------------------------------------------
+
+#FastQC:
+
+#Download from https://www.bioinformatics.babraham.ac.uk/projects/fastqc/ and drag into your applications folder.
+#Open programme from applications folders
+#Click File -> Open, and select your FastQ files. This will take a little bit of time, but eventually it will produce an output that has twelve quality statistics, each denoted by a green check (pass), yellow exclamation mark (warning), or red x (possible fail, depending on what data you’re using). 
+#Basic statistics -- tells you what you need to know about total number of sequences, read length, and GC content (which is important in genome sequencing, as there is a bias towards A’s -- they produce the strongest fluorescent light). 
+#Per base sequence quality
+#The Y-axis is the Phred score, which is a log score of confidence in base pair call. For example, a phred score of 20 means that there is 1 error in 100, while a phred score of 40 is around 1 error in 10,000.
+#The bigger the fragment size, the greater the chance of lagging behind out of phase -- that’s why the larger bp positions have higher ranges in phred score. 
+#You rarely want to trim your GBS data, because you may lose your cut sites/adapters that are identifiable in pipelines. If you are using low-coverage genomes (i.e., short reads) however, you may want to trim out the reads with low phred scores. 
+#If you have low phred scores early in the bp position, there may be a problem.
+#Per tile sequence quality
+#This is pretty much a snapshot of the quality of your lane. If there are areas of light blue, that means that the sequence quality of these areas is low. When should we worry about the amount of blue?
+#Per base sequence quality score
+#Phred score is on the x-axis. 
+Basically, you expect there to be a big increase the quality 
+#Per base sequence content
+#Even representation of AGCT in first 40 bp (usually the adapters)
+#For 40115, R2 has cut site sequence R compliment
+#Per sequence QC content
+#Good for detecting contamination
+#Ber base N content
+#Least useful descriptive statistic -- only needed when replacing N’s
+#Sequence length distribution
+#Should always look like a mountain
+#Sequence duplication levels
+#Helps detect sequence amplification bias
+#In GBS data, you have a lot of duplication
+#Overrepresented sequence
+#Helps detect adapter contamination
+#Adapter content
+#Kmer content
+#You may be able to see the cut site here, and overrepresentation
+#IGV = Genome browser
+#Nextgen Map 
+#A good aligner when working with divergent taxa
+
+--------------------------------------------------------------------------------------------------------------------------
+
+IGV
+
+#File -> Open Fasta file
+
+#31, 31t, 61 (k-mer size)
+#K-mer = all possible substrings of length ‘k’ that are contained in a string. K-mers refer to the possible subsequences (of length k) from a read obtained through DNA sequencing. Helps with differing read length.
+#Gray dots are gaps
+#Mismatch is the difference to reference
+#Dark gray bars, no overlaps
+#White bars, overlap
+
+#First thing -- take your data, map it to the reference. Inspect by eye. Look at coverage.
+
+--------------------------------------------------------------------------------------------------------------------------
+GRM tensor-flow
+
+Type:
+> G5 <- GHHdgn$G5
+> writeG(G5, “gmax”, outtype = 2, , seqID)
+> G1 <- GHWdgm.05$G1
+> writeG(G1,”gmaxG1”, outtype=2, , seqID)
+#This creates outputs in a directory called GMax
+#Then, go to command line, and type:
+
+Perl GRMtensorflow.pl gmaxG1.cxv gmaxG1.tab
+
+#Then, go to projector.tensorflow.org and load the tab delimited files (*.tab.txt). 
+#For the online PCA, you want the components to be components @1, component @1, and component #3. 
+
+--------------------------------------------------------------------------------------------------------------------------
+
+Roger’s Scripts:
+
+#Roger made a filter script that filters a set % of missing data.
+#To run scripts, write:
+
+Perl script name hmcfile 0.5 > new output
+
+#0.5 can be replaced with any % of individuals that have at least the read. 
+
+#Roger also made a perl script that changes the killdeer genome into fake superchromosome 1, with 200 bp fasta fragments that should be mappable to 64-bp fragments. Once genome indexing is done, you don’t have to do it again. 
+
+Perl concatenate_genome.pl ‘original_genome’ > name of new genome 
+
+--------------------------------------------------------------------------------------------------------------------------------
+26 September 2017:
+
+#SGalla chooses 10 individuals to map to kakī draft genomes. These individuals include 1659D, 1565, 2058, 1360, 1904, 240, 1932, 2013, 2111, and 2054. The two draft genomes being assessed are Kaki1_draftgenome_1_1 and Kaki1_draftgenome_1_3.
+
+#I follow instructions on the Tassel 5 GBS v 2 Pipeline wiki page: https://bitbucket.org/tasseladmin/tassel-5-source/wiki/Tassel5GBSv2Pipeline
+
+#To get barcoded files, I have been using the 96Barcodes file that Roger made for us, along with the mux_barcodes.pl perl script that Roger wrote. All you need to do is put the 96barcodes.txt and mux_barcodes.pl into the file with your demultipluxed files that have no barcodes. Then, you run the following script:
+
+perl mux_barcodes.pl “location_of_96Barcodes.txt” “Location_of_all_fastq_files”
+
+#I moves keyfile_barcoded.txt into each of her draft_genome folders. This has the appended barcodes that Roger added while in Palmerston North. Since this project is smaller, I have made a truncated version called “keyfile_barcoded_TrialList.txt .
+
+#Because all the fastq files need to be in one large *.fq file, I went ahead and ran the following code to concatenate them:
+
+cat fastq_240_il.barcoded.fastq fastq_1360_il.barcoded.fastq fastq_1565_il.barcoded.fastq fastq_1659D_il.barcoded.fastq fastq_1904_il.barcoded.fastq fastq_1932_il.barcoded.fastq fastq_2013_il.barcoded.fastq fastq_2054_il.barcoded.fastq fastq_2058_il.barcoded.fastq fastq_2111_il.barcoded.fastq > CAYPUANXX_2_fastq.fq
+
+#If you need to do a TON of samples, you can do something like this:
+
+Cat *.barcoded.fastq > H2J2MBCXY_2_fastq.fq
+
+
+#Then, I navigated to the Tassel_5_StandAlone directory and ran the following code:
+
+./run_pipeline.pl -Xmx8G -fork1 -GBSSeqToTagDBPlugin -e EcoT22I -i “/input directory with .fq file” -db “/same directory as .fq/Draft_Kaki_Genome.db” -k “/same directory as *.fq/keyfile_barcoded_TrialList.txt” -kmerLength 64 -minKmerL 20 -mnQS 20 -mxKmerNum 100000000 -endPlugin -runfork1
+
+#This creates a database for you. I made one with only ten samples, just to make sure I could do it. Once the database is made, you never have to do it again. Make sure that your -Xmx is set to your max RAM setting. -i is your input folder where the fastq files are. -db is where your database can be stored (this should be somewhere on your home directory, as opposed to your external hard drive). -k is your keyfile (just put the name that is in your current directory) and the rest are set to the example. Also, Roger made it such that run_pipeline.pl goes to the folder where your run_pipeline.pl command is, after many errors with Java :)
+
+./run_pipeline.pl -fork1 -TagExportToFastqPlugin -db “/Location_of_Database/Draft_Kaki_Genome.db” -o “/same_location_as_your_db/tagsForAlign.fa.gz” -c 1 -endPlugin -runfork1
+
+#This creates your tagsForAlign.fa.gz file. 
+
+Bwa index -a bwtsw “/location_of_reference_genome/Kaki1_draftgenome_1_1.fasta”
+
+#This creates an index of the reference genome. 
+
+Bwa aln -t4 “/location_of_draft_genome/Kaki1_draftgenome_1_1.fasta” “/Location_of_tags_to_align/tagsForAlign.fa.gz” > “/location_of_new_file/tagsForAlign.sai”
+
+#This creates a *.sai file. 
+
+Bwa samse “/location_of_draft_genome/Kaki1_draftgenome_1_1.fasta” “/location_of_sai/tagsForAlign.sai” “/Location_of_tags_to_align/tagsForAlign.fa.gz” > “/location_of_new_file/tagsForAlign.sam”
+
+#This creates the *.sam file. Make sure that there is actually information in these files. 
+#If you are on the cluster and it doesn’t work, make sure you increase the virtual memory limit. 
+
+./run_pipeline.pl -Xmx8g -fork1 -SAMToGBSdbPlugin -i “/location_of_sam/tagsForAlign.sam” -db “/location_of_database/Draft_Kaki_Genome.db” -aProp 0.0 -aLen 0 -endPlugin -runfork1
+
+./run_pipeline.pl -Xmx8g -fork1 -DiscoverySNPCallerPluginV2 -db “/location_of_db/Draft_Kaki_Genome.db” -sC 1 -eC 1 -mnLCov 0.1 -mnMAF 0.05 -deleteOldData true -endPlugin -runfork1
+
+#I tried running the SNPCallerPluginV2 with start/end chromosomes of 1, but this did not work so well, as no SNPs were called with the draft kakī genome. I then ran the following prompt instead: ./run_pipeline.pl -fork1 -DiscoverySNPCallerPluginV2 -db “/location_of_db/Draft_Kaki_Genome.db”  -mnLCov 0.1 -mnMAF 0.05 -deleteOldData true -endPlugin -runfork1
+
+#This ran every scaffold as if it were a chromosome and took ~2 hours to process. I’m not sure if this is the best way to go, but I have emailed Roger in the meantime to see if he could send the perl script that converts fasta genomes into fake ‘super chromosomes’ with 200 bp fasta inserts. 
+
+
+./run_pipeline.pl -Xmx8g -fork1 -ProductionSNPCallerPluginV2 -db “/location_of_db/Kaki_Draft_Genome.db” -e EcoT22I -i “/location_of_files/” -k “/location_of_keyfile/keyfile_barcoded_TrialList.txt” -kmerLength 64 -o “/location_of_output/Draft_Kaki_Genome_1_1.vcf” -endPlugin -runfork1 
+
+--------------------------------------------------------------------------------------------------------------------------------
+#To discovery read mapping rates for *.SAM files
+
+Awk -F ‘\t’ {print$2} fastq_2058_il.sam | sort | uniq -c | sort -nr
+
+#This will give you three figures. 0 (Forward Maps), 4 (No Maps), and 16 (Reverse Maps)
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+R-Studio ggPlot 
+
+> Micro_PO_SIB_Relatedness <- read.csv("Micro_PO_Sib.txt", sep = "\t", header = TRUE)
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+ 
+
